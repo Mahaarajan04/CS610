@@ -1,0 +1,14 @@
+mahaarajan@gpu3 ~/CS610/assignment4/source-files/220600/problem2-dir $ ./p2a
+No differences found
+CPU time (ms):          507
+Kernel-only time (ms):  7.30896
+End-to-end time (ms):   527
+Ran for 2^ 27
+
+mahaarajan@gpu3 ~/CS610/assignment4/source-files/220600/problem2-dir $ ./p2b
+No differences found
+CPU time (ms):          510
+Kernel-only time (ms):  175.909
+End-to-end time (ms):   1074
+Pow used is 2^ 27
+

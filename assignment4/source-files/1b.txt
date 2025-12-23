@@ -1,0 +1,47 @@
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ ./p1b
+🧠 CPU time: 37 ms
+
+🚀 Naive kernel-only time: 3.79802 ms
+🚚 Naive end-to-end time : 67 ms
+✅ No differences found!
+
+💾 Shared kernel-only time: 1.408 ms
+🚚 Shared end-to-end time : 63 ms
+✅ No differences found!
+Block size is: 8
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ nvcc -O2 -o p1b problem1b.cu
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ ./p1b
+🧠 CPU time: 40 ms
+
+🚀 Naive kernel-only time: 3.60038 ms
+🚚 Naive end-to-end time : 66 ms
+✅ No differences found!
+
+💾 Shared kernel-only time: 2.35622 ms
+🚚 Shared end-to-end time : 65 ms
+✅ No differences found!
+Block size is: 4
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ nvcc -O2 -o p1b problem1b.cu
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ ./p1b
+🧠 CPU time: 36 ms
+
+🚀 Naive kernel-only time: 5.53882 ms
+🚚 Naive end-to-end time : 77 ms
+✅ No differences found!
+
+💾 Shared kernel-only time: 5.76 ms
+🚚 Shared end-to-end time : 66 ms
+✅ No differences found!
+Block size is: 2
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ nvcc -O2 -o p1b problem1b.cu
+mahaarajan@gpu3 ~/CS610/assignment4/source-files $ ./p1b
+🧠 CPU time: 37 ms
+
+🚀 Naive kernel-only time: 18.8713 ms
+🚚 Naive end-to-end time : 80 ms
+✅ No differences found!
+
+💾 Shared kernel-only time: 24.448 ms
+🚚 Shared end-to-end time : 85 ms
+✅ No differences found!
+Block size is: 1

@@ -1,0 +1,91 @@
+// We define TILE_3D sizes for 3D
+#define BZ_3D 4
+#define BY_3D 8
+#define BX_3D 8
+
+#define TILE_3D_Z (BZ_3D + 2*R_3D)
+#define TILE_3D_Y (BY_3D + 2*R_3D)
+#define TILE_3D_X (BX_3D + 2*R_3D)
+
+__global__ void kernel3D_opt(const float* __restrict__ inp,
+                             float* __restrict__ out,
+                             int N)
+{
+    __shared__ float TILE_3D[TILE_3D_Z][TILE_3D_Y][TILE_3D_X];
+
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int tz = threadIdx.z;
+
+    int base_k = blockIdx.x * BX_3D;
+    int base_j = blockIdx.y * BY_3D;
+    int base_i = blockIdx.z * BZ_3D;
+
+    // ----------------------------------------------------------
+    // LOAD SHARED TILE_3D WITH ZERO PADDING
+    // Each thread loads multiple cells
+    // ----------------------------------------------------------
+    for (int tz2 = tz; tz2 < TILE_3D_Z; tz2 += blockDim.z) {
+        int gi = base_i + tz2 - R_3D;
+
+        for (int ty2 = ty; ty2 < TILE_3D_Y; ty2 += blockDim.y) {
+            int gj = base_j + ty2 - R_3D;
+
+            for (int tx2 = tx; tx2 < TILE_3D_X; tx2 += blockDim.x) {
+                int gk = base_k + tx2 - R_3D;
+
+                if (gi < 0 || gi >= N ||
+                    gj < 0 || gj >= N ||
+                    gk < 0 || gk >= N)
+                {
+                    TILE_3D[tz2][ty2][tx2] = 0.0f;
+                }
+                else {
+                    TILE_3D[tz2][ty2][tx2] = inp[(gi*N + gj)*N + gk];
+                }
+            }
+        }
+    }
+
+    __syncthreads();
+
+    // ----------------------------------------------------------
+    // COMPUTE OUTPUT AT (i, j, k)
+    // ----------------------------------------------------------
+    int i = base_i + tz;
+    int j = base_j + ty;
+    int k = base_k + tx;
+
+    if (i >= N || j >= N || k >= N)
+        return;
+
+    float sum = 0.0f;
+
+#pragma unroll
+    for (int fz = -R_3D; fz <= R_3D; fz++) {
+        int tz2 = tz + fz + R_3D;
+
+#pragma unroll
+        for (int fy = -R_3D; fy <= R_3D; fy++) {
+            int ty2 = ty + fy + R_3D;
+
+#pragma unroll
+            for (int fx = -R_3D; fx <= R_3D; fx++) {
+                int tx2 = tx + fx + R_3D;
+
+                float voxel = TILE_3D[tz2][ty2][tx2];
+
+                int f_idx =
+                    (fz+R_3D)*FILTER_W_3D*FILTER_W_3D +
+                    (fy+R_3D)*FILTER_W_3D +
+                    (fx+R_3D);
+
+                float w = d_filter3D[f_idx];
+
+                sum += voxel * w;
+            }
+        }
+    }
+
+    out[(i*N + j)*N + k] = sum;
+}
