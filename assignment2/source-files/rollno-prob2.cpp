@@ -11,14 +11,11 @@
 #include <queue>
 #include <string>
 #include <unistd.h>
-#include <chrono>
 
 using std::cerr;
 using std::cout;
 using std::endl;
 using std::ios;
-
-
 
 // Max different files
 const int MAX_FILES = 10;
@@ -31,7 +28,7 @@ struct t_data {
 
 // struct to keep track of the number of occurrences of a word
 struct word_tracker {
-  uint64_t word_count[100]; 
+  uint64_t word_count[4];
   uint64_t total_lines_processed;
   uint64_t total_words_processed;
   pthread_mutex_t word_count_mutex;
@@ -81,6 +78,7 @@ int main(int argc, char* argv[]) {
   if (argc != 3) {
     print_usage(argv[0]);
   }
+
   thread_count = strtol(argv[1], NULL, 10);
   MAX_THREADS = thread_count;
   std::string input = argv[2];
@@ -96,7 +94,7 @@ int main(int argc, char* argv[]) {
     tracker.word_count[i] = 0;
   tracker.total_lines_processed = 0;
   tracker.word_count_mutex = PTHREAD_MUTEX_INITIALIZER;
-  auto start = std::chrono::high_resolution_clock::now();
+
   for (int i = 0; i < thread_count; i++) {
     args_array[i].tid = i;
     pthread_create(&threads_worker[i], nullptr, thread_runner,
@@ -105,12 +103,11 @@ int main(int argc, char* argv[]) {
 
   for (int i = 0; i < thread_count; i++)
     pthread_join(threads_worker[i], NULL);
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
   print_counters();
   cout << "Total words processed: " << tracker.total_words_processed << "\n";
   cout << "Total line processed: " << tracker.total_lines_processed << "\n";
-   cout << "Total sync time (us): " << duration_us << "\n";
+
   return EXIT_SUCCESS;
 }
 

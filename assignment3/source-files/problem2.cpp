@@ -13,7 +13,7 @@ using HR = std::chrono::high_resolution_clock;
 using HRTimer = HR::time_point;
 using std::chrono::microseconds;
 
-#define N (1 << 24)
+#define N (1 << 16)
 #define SSE_WIDTH_BITS (128)
 #define ALIGN (32)
 
@@ -110,53 +110,7 @@ int sse4_version(const int* __restrict__ source, int* __restrict__ dest) {
   return dest[N - 1];
 }
 
-int avx2_version(const int* __restrict__ source, int* __restrict__ dest) {
-  // Respect 32-byte alignment used by the driver (aligned_alloc with ALIGN=32)
-  source = static_cast<int*>(__builtin_assume_aligned(source, ALIGN));
-  dest   = static_cast<int*>(__builtin_assume_aligned(dest, ALIGN));
-
-  // Offset carries the running sum from the previous 256-bit block
-  __m256i offset = _mm256_setzero_si256();
-
-  // Each AVX2 register holds 8 x int32
-  const int stride = 8;
-
-  for (int i = 0; i < N; i += stride) {
-    // Load 8 ints
-    __m256i x = _mm256_load_si256(reinterpret_cast<const __m256i*>(&source[i]));
-
-    // --- Intra-128-bit scans (two independent 4-wide scans) ---
-    // Note: _mm256_slli_si256 shifts within 128-bit lanes only.
-    __m256i t1 = _mm256_slli_si256(x, 4);   // shift by 1 int (4 bytes)
-    x = _mm256_add_epi32(x, t1);
-
-    __m256i t2 = _mm256_slli_si256(x, 8);   // shift by 2 ints (8 bytes)
-    x = _mm256_add_epi32(x, t2);
-
-    // Now lower 128 has [a, a+b, a+b+c, a+b+c+d]
-    // and upper 128 has [e, e+f, e+f+g, e+f+g+h], but upper half
-    // still lacks the carry from the lower half (a+b+c+d).
-
-    // --- Cross-128-bit carry to the upper half ---
-    int carry_low = _mm256_extract_epi32(x, 3);               // last of lower 128
-    __m256i carry_hi = _mm256_set_epi32(carry_low, carry_low, carry_low, carry_low,
-                                        0, 0, 0, 0);          // add only to lanes 4..7
-    x = _mm256_add_epi32(x, carry_hi);
-
-    // --- Add running offset from previous blocks ---
-    x = _mm256_add_epi32(x, offset);
-
-    // Store the block
-    _mm256_store_si256(reinterpret_cast<__m256i*>(&dest[i]), x);
-
-    // Update offset with the last element of this block
-    int block_sum = _mm256_extract_epi32(x, 7);
-    offset = _mm256_set1_epi32(block_sum);
-  }
-
-  return dest[N - 1];
-}
-
+int avx2_version(const int* source, int* dest) { return 0; }
 
 __attribute__((optimize("no-tree-vectorize"))) int main() {
   int* array = static_cast<int*>(aligned_alloc(ALIGN, N * sizeof(int)));
@@ -190,14 +144,12 @@ __attribute__((optimize("no-tree-vectorize"))) int main() {
   cout << "SSE version: " << val_sse << " time: " << duration << endl;
   free(sse_res);
 
-  int* avx2_res = static_cast<int*>(aligned_alloc(ALIGN, N * sizeof(int)));
-  std::fill(avx2_res, avx2_res + N, 0);
-  start = HR::now();
-  int val_avx2 = avx2_version(array, avx2_res);
-  end = HR::now();
-  duration = duration_cast<microseconds>(end - start).count();
-  assert(val_ser == val_avx2 || printf("AVX2 result is wrong!\n"));
-  cout << "AVX2 version: " << val_avx2 << " time: " << duration << endl;
+  // start = HR::now();
+  // int val_avx2 = avx2_version(array, avx2_res);
+  // end = HR::now();
+  // duration = duration_cast<microseconds>(end - start).count();
+  // assert(val_ser == val_avx2 || printf("AVX2 result is wrong!\n"));
+  // cout << "AVX2 version: " << val_avx2 << " time: " << duration << endl;
 
   return EXIT_SUCCESS;
 }

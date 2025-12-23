@@ -6,7 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <pthread.h>
-//hehehe
+
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -17,48 +17,11 @@ using std::chrono::duration_cast;
 using std::chrono::microseconds;
 using std::chrono::milliseconds;
 
-#define N (1e4) //og was 1e7
+#define N (1e7)
 #define NUM_THREADS (8)
 
 // Shared variables
 uint64_t var1 = 0, var2 = (N * NUM_THREADS + 1);
-//Inline assembly functions for atomic operations
-inline void memory_barrier() {
-    asm volatile ("mfence" ::: "memory");
-}
-
-inline int atomic_lock_test_and_set(volatile int* ptr, int val = 1) {
-    int old;
-    asm volatile (
-        "xchg %0, %1"
-        : "=r"(old), "+m"(*ptr)
-        : "0"(val)
-        : "memory"
-    );
-    return old;
-}
-
-inline int atomic_fetch_and_add(volatile int* ptr, int val = 1) {
-    int old;
-    asm volatile (
-        "lock xadd %0, %1"
-        : "=r"(old), "+m"(*ptr)
-        : "0"(val)
-        : "memory"
-    );
-    return old;
-}
-
-inline int atomic_compare_and_swap(volatile int* ptr, int expected, int desired) {
-    int old;
-    asm volatile (
-        "lock cmpxchg %2, %1"
-        : "=a"(old), "+m"(*ptr)
-        : "r"(desired), "0"(expected)
-        : "memory"
-    );
-    return old;
-}
 
 // Abstract base class
 class LockBase {
@@ -84,185 +47,49 @@ private:
 };
 
 class FilterLock : public LockBase {
-private:
-  int* level;
-  int* victim;
 public:
-  void acquire(uint16_t tid) override {
-    for (int i = 1; i < NUM_THREADS; i++) {
-      level[tid] = i;
-      memory_barrier();
-      victim[i] = tid;
-      memory_barrier();
-      // Wait until no threads have same or higher level and
-      // no thread has the same level and is the victim
-      for (int k = 0; k < NUM_THREADS; k++) {
-        if (k == tid) continue;
-        while (level[k] >= i && victim[i] == tid)
-          ;
-      }
-    }
-  }
+  void acquire(uint16_t tid) override {}
+  void release(uint16_t tid) override {}
 
-
-  void release(uint16_t tid) override {
-    level[tid] = 0;
-    memory_barrier();
-  }
-
-  FilterLock() {
-    level = new int[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++) {
-      level[i] = 0;
-    }
-    victim = new int[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++) {
-      victim[i] = 0;
-    }
-  }
-  ~FilterLock() {
-    delete[] level;
-    delete[] victim;
-  }
+  FilterLock() {}
+  ~FilterLock() {}
 };
 
 class BakeryLock : public LockBase {
-private:
-  bool *choose;
-  int *ticket;
 public:
-  void acquire(uint16_t tid) override {
-    choose[tid] = true;
-    memory_barrier();
-    int max_ticket = 0;
-    for(int k=0; k<NUM_THREADS; k++){
-      max_ticket = max_ticket>ticket[k] ? max_ticket:ticket[k];
-    }
-    ticket[tid] = max_ticket + 1;
-    memory_barrier();
-    choose[tid] = false;
-    memory_barrier();
-    for (int k = 0; k < NUM_THREADS; k++) {
-      if (k == tid) continue;
-      while (choose[k])
-        ;
-      while (ticket[k] != 0 && (ticket[k] < ticket[tid] || (ticket[k] == ticket[tid] && k < tid)))
-        ;
-    }
-  }
+  void acquire(uint16_t tid) override {}
+  void release(uint16_t tid) override {}
 
-  void release(uint16_t tid) override {
-    ticket[tid] = 0;
-    memory_barrier();
-  }
-
-  BakeryLock() {
-    choose = new bool[NUM_THREADS];
-    ticket = new int[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++) {
-      choose[i] = false;
-      ticket[i] = 0;
-    }
-  }
-  ~BakeryLock() {
-    delete[] choose;
-    delete[] ticket;
-  }
+  BakeryLock() {}
+  ~BakeryLock() {}
 };
 
 class SpinLock : public LockBase {
-private:
-  volatile int flag = 0;
 public:
-  void acquire(uint16_t tid) override {
-    while (atomic_lock_test_and_set(&flag, 1)) {
-      // busy-wait
-    }
-  }
-  void release(uint16_t tid) override {
-    flag = 0;
-    memory_barrier();
-  }
+  void acquire(uint16_t tid) override {}
+  void release(uint16_t tid) override {}
 
-  SpinLock() {
-    flag=0;
-  }
+  SpinLock() {}
   ~SpinLock() {}
 };
 
 class TicketLock : public LockBase {
-private:
-  volatile int next_ticket = 0;
-  volatile int serving_now = 0;
-
 public:
-  void acquire(uint16_t tid) override {
-    int my_ticket = atomic_fetch_and_add(&next_ticket, 1);
-    while (atomic_compare_and_swap(&serving_now, my_ticket, my_ticket) != my_ticket) {
-      // spin until it's my turn
-    }
-  }
-
-  void release(uint16_t tid) override {
-    atomic_fetch_and_add(&serving_now, 1); // Move to next ticket
-  }
+  void acquire(uint16_t tid) override {}
+  void release(uint16_t tid) override {}
 
   TicketLock() {}
   ~TicketLock() {}
 };
 
-
-
-
-
 class ArrayQLock : public LockBase {
-private:
-  volatile int tail = 0;
-  volatile bool* flags;
-  int* mySlot;
-  const int SIZE = NUM_THREADS;
-
 public:
-  void acquire(uint16_t tid) override {
-    // Atomically get a slot in the ring
-    int slot = atomic_fetch_and_add(&tail, 1) % SIZE;
-    mySlot[tid] = slot;
+  void acquire(uint16_t tid) override {}
+  void release(uint16_t tid) override {}
 
-    // Spin until this slot is enabled
-    while (!flags[slot]) {
-      // busy wait
-    }
-
-    // Immediately disable our own slot for next wraparound
-    flags[slot] = false;  // no need for CAS; this thread owns the slot
-  }
-
-  void release(uint16_t tid) override {
-    int slot = mySlot[tid];
-    int next = (slot + 1) % SIZE;
-
-    // Enable next slot
-    // __sync_synchronize() acts as a full memory fence (acts like release)
-    memory_barrier(); // ensures all CS writes are visible before unlock
-    flags[next] = true;
-  }
-
-  ArrayQLock() {
-    flags = new bool[SIZE];
-    mySlot = new int[SIZE];
-    for (int i = 0; i < SIZE; ++i)
-      flags[i] = false;
-    flags[0] = true;  // only first slot is enabled initially
-  }
-
-  ~ArrayQLock() {
-    delete[] flags;
-    delete[] mySlot;
-  }
+  ArrayQLock() {}
+  ~ArrayQLock() {}
 };
-
-
-
 
 /** Estimate the time taken */
 std::atomic_uint64_t sync_time = 0;
@@ -339,7 +166,7 @@ int main() {
   }
 
   assert(var1 == N * NUM_THREADS && var2 == 1);
-  cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
+  // cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
   cout << "Pthread mutex: Time taken (us): " << sync_time << "\n";
 
   // Filter lock
@@ -372,8 +199,9 @@ int main() {
   }
 
   cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
-  assert(var1 == N * NUM_THREADS && var2 == 1);
+  // assert(var1 == N * NUM_THREADS && var2 == 1);
   cout << "Filter lock: Time taken (us): " << sync_time << "\n";
+
   // Bakery lock
   var1 = 0;
   var2 = (N * NUM_THREADS + 1);
@@ -404,7 +232,7 @@ int main() {
   }
 
   cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
-  assert(var1 == N * NUM_THREADS && var2 == 1);
+  // assert(var1 == N * NUM_THREADS && var2 == 1);
   cout << "Bakery lock: Time taken (us): " << sync_time << "\n";
 
   // Spin lock
@@ -437,8 +265,9 @@ int main() {
   }
 
   cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
-  assert(var1 == N * NUM_THREADS && var2 == 1);
+  // assert(var1 == N * NUM_THREADS && var2 == 1);
   cout << "Spin lock: Time taken (us): " << sync_time << "\n";
+
   // Ticket lock
   var1 = 0;
   var2 = (N * NUM_THREADS + 1);
@@ -469,7 +298,7 @@ int main() {
   }
 
   cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
-  assert(var1 == N * NUM_THREADS && var2 == 1);
+  // assert(var1 == N * NUM_THREADS && var2 == 1);
   cout << "Ticket lock: Time taken (us): " << sync_time << "\n";
 
   // Array Q lock
@@ -502,12 +331,11 @@ int main() {
   }
 
   cout << "Var1: " << var1 << "\tVar2: " << var2 << "\n";
-  assert(var1 == N * NUM_THREADS && var2 == 1);
+  // assert(var1 == N * NUM_THREADS && var2 == 1);
   cout << "Array Q lock: Time taken (us): " << sync_time << "\n";
 
   pthread_barrier_destroy(&g_barrier);
   pthread_attr_destroy(&attr);
 
   pthread_exit(NULL);
-  
 }

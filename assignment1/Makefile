@@ -3,7 +3,7 @@ CXX := g++
 
 # Files
 TARGET := prob_3
-SRC := 220600.cpp
+SRC := problem3-dir/220600.cpp
 
 # Default build target
 all: $(TARGET)
